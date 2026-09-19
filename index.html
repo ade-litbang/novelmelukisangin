@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Melukis Hati - R.Ade Hermadi</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Playfair+Display:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            /* Light Mode (Manuscript) */
+            --bg-env-light: #161615; /* Dark surroundings */
+            --bg-paper-light: #f5f2eb;
+            --text-light: #2c2b28;
+            --gold: #b59a45;
+            --spine-light: linear-gradient(to right, 
+                transparent 0%, 
+                rgba(0,0,0,0.01) 45%, 
+                rgba(0,0,0,0.06) 49%, 
+                rgba(0,0,0,0.12) 50%, 
+                rgba(0,0,0,0.06) 51%, 
+                rgba(0,0,0,0.01) 55%, 
+                transparent 100%);
+
+            /* Dark Mode (Night Ink) */
+            --bg-env-dark: #0a0a0a;
+            --bg-paper-dark: #1c1b1a;
+            --text-dark: #d6d5cf;
+            --gold-dark: #a3893c;
+            --spine-dark: linear-gradient(to right, 
+                transparent 0%, 
+                rgba(0,0,0,0.1) 45%, 
+                rgba(0,0,0,0.4) 49%, 
+                rgba(0,0,0,0.8) 50%, 
+                rgba(0,0,0,0.4) 51%, 
+                rgba(0,0,0,0.1) 55%, 
+                transparent 100%);
+        }
+
+        body {
+            font-family: 'Crimson Pro', serif;
+            background-color: var(--bg-env-light);
+            color: var(--text-light);
+            margin: 0;
+            overflow: hidden; /* App-like, prevent window scroll */
+            user-select: none; 
+            transition: background-color 1s ease;
+        }
+
+        body.ink-night {
+            background-color: var(--bg-env-dark);
+        }
+
+        h1, h2, h3, .title-font {
+            font-family: 'Playfair Display', serif;
+        }
+
+        .book-environment {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+        }
+
+        @media (min-width: 768px) {
+            .book-environment { padding: 2rem 4rem; }
+        }
+
+        .book {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-paper-light);
+            transition: background-color 1s ease, box-shadow 1s ease;
+            perspective: 2000px; /* For 3D flip */
+        }
+
+        body.ink-night .book {
+            background-color: var(--bg-paper-dark);
+            color: var(--text-dark);
+        }
+
+        @media (min-width: 768px) {
+            .book {
+                max-width: 1200px;
+                height: 90vh;
+                border-radius: 4px;
+                box-shadow: 0 20px 50px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,0,0,0.05);
+            }
+            body.ink-night .book {
+                box-shadow: 0 20px 50px rgba(0,0,0,0.9), 0 0 0 1px rgba(255,255,255,0.02);
+            }
+        }
+
+        /* Subtle paper texture */
+        .paper-texture {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 5;
+            opacity: 0.3;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+            mix-blend-mode: multiply;
+        }
+        body.ink-night .paper-texture {
+            opacity: 0.15;
+            mix-blend-mode: screen;
+        }
+
+        /* Spine shadow (Desktop only) */
+        .book-spine {
+            display: none;
+            position: absolute;
+            top: 0; left: 50%;
+            width: 150px;
+            height: 100%;
+            transform: translateX(-50%);
+            background: var(--spine-light);
+            pointer-events: none;
+            z-index: 10;
+        }
+        @media (min-width: 768px) {
+            .book-spine { display: block; }
+        }
+        body.ink-night .book-spine {
+            background: var(--spine-dark);
+        }
+
+        .page-layer {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            overflow-y: auto;
+            overflow-x: hidden;
+            /* Book margins */
+            padding: 3rem 1.5rem 6rem 1.5rem; 
+            transform-origin: center;
+            backface-visibility: hidden;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        @media (min-width: 768px) {
+            .page-layer {
+                padding: 4rem 4rem 6rem 4rem;
+            }
+        }
+
+        /* Hide scrollbar completely for immersion */
+        .page-layer::-webkit-scrollbar { display: none; }
+        .page-layer { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* 3D Page Turn Animations */
+        @keyframes turnOutNext {
+            0% { transform: rotateY(0deg); opacity: 1; transform-origin: left center; }
+            100% { transform: rotateY(-30deg); opacity: 0; transform-origin: left center; }
+        }
+        @keyframes turnInNext {
+            0% { transform: rotateY(30deg); opacity: 0; transform-origin: right center; }
+            100% { transform: rotateY(0deg); opacity: 1; transform-origin: right center; }
+        }
+        @keyframes turnOutPrev {
+            0% { transform: rotateY(0deg); opacity: 1; transform-origin: right center; }
+            100% { transform: rotateY(30deg); opacity: 0; transform-origin: right center; }
+        }
+        @keyframes turnInPrev {
+            0% { transform: rotateY(-30deg); opacity: 0; transform-origin: left center; }
+            100% { transform: rotateY(0deg); opacity: 1; transform-origin: left center; }
+        }
+        @keyframes softFadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .content-title { opacity: 0; animation: softFadeIn 1s cubic-bezier(0.4, 0, 0.2, 1) forwards 0.2s; }
+        .content-image { opacity: 0; animation: softFadeIn 1.2s cubic-bezier(0.4, 0, 0.2, 1) forwards 0.8s; }
+        .content-text { opacity: 0; animation: softFadeIn 1.5s cubic-bezier(0.4, 0, 0.2, 1) forwards 1.4s; }
+
+        /* Multi-column layout for desktop (Two-page spread illusion) */
+        @media (min-width: 768px) {
+            .text-columns {
+                column-count: 2;
+                column-gap: 8rem; /* Wide gap to wrap around the center spine */
+                text-align: justify;
+            }
+        }
+        
+        .story-paragraph {
+            margin-bottom: 1.5rem;
+            line-height: 2;
+            font-size: 1.15rem;
+        }
+        .first-letter-drop::first-letter {
+            font-family: 'Playfair Display', serif;
+            font-size: 4rem;
+            line-height: 1;
+            float: left;
+            margin-right: 0.5rem;
+            color: var(--gold);
+        }
+
+        /* Ink Wash Placeholder Box */
+        .ink-illustration {
+            background: linear-gradient(to bottom, transparent, rgba(0,0,0,0.02)), url("data:image/svg+xml,%3Csvg viewBox='0 0 400 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.015' numOctaves='2'/%3E%3CfeDisplacementMap in='SourceGraphic' scale='15'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' fill='none' stroke='%23888' stroke-width='1' filter='url(%23f)' opacity='0.15'/%3E%3C/svg%3E");
+            border-bottom: 1px solid rgba(0,0,0,0.05);
+            border-top: 1px solid rgba(0,0,0,0.05);
+        }
+        body.ink-night .ink-illustration {
+            background: linear-gradient(to bottom, transparent, rgba(255,255,255,0.01)), url("data:image/svg+xml,%3Csvg viewBox='0 0 400 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.015' numOctaves='2'/%3E%3CfeDisplacementMap in='SourceGraphic' scale='15'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' fill='none' stroke='%23ccc' stroke-width='1' filter='url(%23f)' opacity='0.1'/%3E%3C/svg%3E");
+            border-color: rgba(255,255,255,0.05);
+        }
+
+        .ui-element {
+            transition: opacity 1s ease;
+        }
+        
+        .corner-mark {
+            width: 14px;
+            height: 14px;
+            border-color: var(--gold);
+            opacity: 0.4;
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+        .corner-nav:hover .corner-mark {
+            opacity: 1;
+        }
+        .corner-nav.prev:hover .corner-mark { transform: translateX(-4px) rotate(45deg); }
+        .corner-nav.next:hover .corner-mark { transform: translateX(4px) rotate(45deg); }
+
+        .minimal-btn {
+            background: transparent;
+            border: none;
+            color: inherit;
+            opacity: 0.6;
+            transition: opacity 0.3s ease;
+            cursor: pointer;
+            font-size: 0.9rem;
+            letter-spacing: 0.1em;
+        }
+        .minimal-btn:hover { opacity: 1; color: var(--gold); }
+
+        /* Minimal Progress Line */
+        .progress-line-container {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80%;
+            height: 2px;
+            background: rgba(0,0,0,0.05);
+            z-index: 20;
+        }
+        body.ink-night .progress-line-container { background: rgba(255,255,255,0.05); }
+        
+        .progress-line-fill {
+            height: 100%;
+            background: var(--gold);
+            width: 0%;
+            transition: width 0.8s ease;
+        }
+
+        /* Cursor hide class */
+        .cursor-hidden {
+            cursor: none !important;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="book-environment">
+        
+        <!-- Top Nav Overlay (Auto-hides) -->
+        <nav id="top-nav" class="ui-element fixed top-0 left-0 w-full p-6 flex justify-between items-center z-50 mix-blend-difference text-white">
+            <button onclick="toggleMenu()" class="minimal-btn uppercase tracking-[0.2em] text-xs flex items-center gap-2">
+                <span class="w-4 h-px bg-current block"></span>
+                Daftar Isi
+            </button>
+            <div class="flex gap-6">
+                <button onclick="toggleTheme()" class="minimal-btn text-lg" title="Mode Tinta">☾</button>
+                <button onclick="changeFontSize()" class="minimal-btn font-serif italic text-lg" title="Ukuran Teks">Aa</button>
+            </div>
+        </nav>
+
+        <div class="book" id="book-container">
+            <div class="paper-texture"></div>
+            <div class="book-spine"></div>
+
+            <!-- Pages will be injected here -->
+            <div id="pages-wrapper" class="relative w-full h-full"></div>
+
+            <!-- Minimalist Navigation Corners -->
+            <div id="nav-prev" class="ui-element corner-nav prev absolute bottom-0 left-0 w-24 h-24 md:w-32 md:h-32 cursor-pointer flex items-end justify-start p-6 md:p-10 z-30" onclick="prevPage()">
+                <div class="corner-mark border-b-2 border-l-2 transform rotate-45"></div>
+            </div>
+            
+            <div id="nav-next" class="ui-element corner-nav next absolute bottom-0 right-0 w-24 h-24 md:w-32 md:h-32 cursor-pointer flex items-end justify-end p-6 md:p-10 z-30" onclick="nextPage()">
+                <div class="corner-mark border-t-2 border-r-2 transform rotate-45"></div>
+            </div>
+
+            <!-- Minimal Progress -->
+            <div class="ui-element progress-line-container">
+                <div id="progress-bar" class="progress-line-fill"></div>
+            </div>
+            
+            <div id="page-indicator" class="ui-element absolute bottom-4 left-1/2 transform -translate-x-1/2 text-[0.65rem] tracking-[0.2em] opacity-40 z-30 font-serif">
+                <!-- Page numbers -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar Menu (TOC) -->
+    <div id="menu-overlay" class="fixed inset-0 bg-black/60 z-[100] opacity-0 pointer-events-none transition-opacity duration-500 backdrop-blur-sm" onclick="toggleMenu()"></div>
+    <div id="side-menu" class="fixed top-0 left-0 h-full w-80 max-w-[85vw] transform -translate-x-full transition-transform duration-700 ease-in-out z-[101] flex flex-col shadow-2xl" style="background-color: var(--bg-paper-light); color: var(--text-light);">
+        <div class="p-8 pb-4 flex justify-between items-center border-b border-gray-300/20">
+            <h2 class="title-font text-2xl tracking-wide">Indeks</h2>
+            <button onclick="toggleMenu()" class="text-2xl opacity-50 hover:opacity-100 transition-opacity font-light">×</button>
+        </div>
+        <div id="toc-list" class="p-8 overflow-y-auto flex-grow flex flex-col gap-5 text-sm tracking-wide">
+            <!-- TOC Injected Here -->
+        </div>
+    </div>
+
+    <!-- Hening Sejenak Overlay -->
+    <div id="silence-overlay" class="fixed inset-0 bg-black z-[120] flex flex-col items-center justify-center opacity-0 pointer-events-none transition-opacity duration-1000">
+        <div class="text-center text-[#e4e2db] max-w-md px-8">
+            <p class="title-font text-2xl md:text-3xl mb-12 leading-loose font-light">
+                "Jangan buru-buru menjawab.<br>Ada pertanyaan yang memang membutuhkan waktu untuk matang."
+            </p>
+            <button onclick="closeSilence()" class="minimal-btn border-b border-[#e4e2db]/30 pb-1 hover:border-[#e4e2db] transition-colors">
+                Kembali
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const STORY_DATA = [
+            {
+                type: 'cover',
+                chapter: 0,
+                content: `
+                    <div class="text-center flex flex-col items-center justify-center h-full max-w-2xl mx-auto px-4 content-text">
+                        <div class="w-16 h-16 md:w-20 md:h-20 rounded-full ink-illustration mb-10 flex items-center justify-center opacity-60 mx-auto">
+                            <span class="text-2xl opacity-50">⛰</span>
+                        </div>
+                        <h1 class="title-font text-4xl md:text-6xl font-bold mb-6 tracking-[0.1em] text-[var(--gold)]">MELUKIS HATI</h1>
+                        <p class="text-lg md:text-xl italic opacity-70 max-w-md mx-auto mb-16 leading-relaxed">
+                            "Catatan Seorang Pengembara di Antara Gunung, Sungai, dan Hati Manusia"
+                        </p>
+                        <div class="text-xs tracking-[0.2em] uppercase opacity-50 mb-12 border-t border-current border-opacity-20 pt-8 inline-block px-8">
+                            Sebuah Karya<br>
+                            <span class="font-bold text-[var(--gold)] mt-3 block text-sm">R.Ade Hermadi</span>
+                        </div>
+                    </div>
+                `
+            },
+            {
+                type: 'opening',
+                chapter: 0,
+                content: `
+                    <div class="text-center flex flex-col items-center justify-center h-full px-4 content-text">
+                        <p class="title-font text-2xl md:text-3xl leading-loose max-w-2xl mx-auto opacity-80">
+                            "Gunung tidak pernah sibuk membuktikan bahwa ia tinggi.<br>
+                            Sungai tidak pernah berdebat tentang siapa yang lebih benar.<br><br>
+                            Hanya manusia yang sering lupa<br>
+                            bahwa dirinya sedang berdiri di dalam kabut."
+                        </p>
+                    </div>
+                `
+            },
+            {
+                type: 'chapter',
+                chapter: 1,
+                title: 'Gunung yang Diam',
+                imagePrompt: 'Monochrome ink wash. Seorang lelaki tua (Guru Tariq) berpeci putih duduk di pondok bambu, melukis kaligrafi. Jendela terbuka menghadap gunung berkabut. Banyak ruang kosong.',
+                content: `
+                    <p class="story-paragraph first-letter-drop">Selama enam puluh tahun aku melukis gunung, dan baru hari ini aku menyadari satu hal: gunung tidak pernah menjadi masalah, manusialah yang membuat dunia ini menjadi rumit.</p>
+                    <p class="story-paragraph">Guru Tariq meletakkan kuasnya di atas penyangga kayu. Tinta hitam di atas kertas beras itu perlahan mengering, membentuk siluet puncak yang tertutup awan. Ia menatap ke luar jendela bambunya. Angin dingin berhembus, membawa aroma pinus basah.</p>
+                    <p class="story-paragraph">Alam selalu jujur. Jika hujan, ia membasahi. Jika kemarau, ia mengeringkan. Tidak ada tipu daya pada sehelai daun bambu yang merunduk saat angin bertiup kencang. Ia merunduk bukan untuk mencari muka pada angin, melainkan karena ia tahu batas kekuatannya.</p>
+                    <p class="story-paragraph">Namun manusia? Manusia bisa tersenyum di hadapanmu, sementara tangannya menyembunyikan belati di balik punggungnya. Manusia bisa berbicara tentang keadilan, sementara kakinya menginjak leher orang lain.</p>
+                    <p class="story-paragraph">Guru Tariq menghela napas, merapikan lengan jubah gelapnya. Peci putihnya yang sederhana tampak kontras di tengah ruangan yang remang. Ia baru saja berniat menyeduh teh ketika terdengar suara langkah kaki yang tergesa-gesa memecah kesunyian lembah.</p>
+                    <p class="story-paragraph italic text-center mt-10 md:mt-16 opacity-70">Ketukan di pintu kayu itu tidak terdengar seperti salam. Ketukan itu terdengar seperti sebuah keputusasaan.</p>
+                `
+            },
+            {
+                type: 'chapter',
+                chapter: 2,
+                title: 'Murid yang Bertanya',
+                imagePrompt: 'Outdoor scene. Guru (peci putih, jubah gelap) berdiri di tepi sungai berbatu yang deras, menunjuk air. Di sebelahnya pemuda (Jian) berpakaian musafir tampak tegang.',
+                content: `
+                    <p class="story-paragraph">Pintu terbuka, memperlihatkan seorang pemuda dengan pakaian yang basah oleh embun dan debu perjalanan. Napasnya memburu. Matanya menyala oleh amarah yang belum padam. Namanya Jian, seorang pengembara yang baru saja menelan pahitnya dunia.</p>
+                    <p class="story-paragraph">"Guru," ucap Jian, suaranya bergetar. "Kalau semua orang merasa dirinya benar, bagaimana kita tahu siapa yang sebenarnya benar? Dunia ini gila. Semua orang saling menerkam dan berteriak bahwa mereka melakukannya demi kebenaran!"</p>
+                    <p class="story-paragraph">Guru Tariq tidak langsung menjawab. Ia mengambil teko tanah liat, menuangkan teh panas ke dalam dua cangkir kecil, dan memberikan salah satunya kepada Jian. "Minumlah. Kemarahan membuat kerongkonganmu kering," ucap Guru lembut.</p>
+                    <p class="story-paragraph">Jian meminumnya dalam satu tegukan, tidak peduli pada lidahnya yang melepuh. Ia butuh jawaban, bukan teh. Guru Tariq tersenyum kecil. Ia melangkah keluar pondok, memberi isyarat agar Jian mengikutinya menuju sungai yang membelah lembah.</p>
+                    <p class="story-paragraph">"Lihatlah sungai ini, Jian," kata Guru sambil menunjuk ke arah air yang mengalir. "Air ini bermula dari mata air yang sama di puncak gunung. Sangat jernih. Sangat murni. Lalu, air ini turun ke bawah. Ada yang melewati lumpur dan menjadi keruh. Ada yang melewati akar beracun dan menjadi pahit. Semuanya mengalir dengan cara dan jalannya masing-masing, merasa bahwa arahnya menuju lautan adalah yang paling benar."</p>
+                    <p class="story-paragraph font-bold mt-10 opacity-80 text-[var(--gold)]">"Tahukah engkau, Jian... persoalan terbesarnya bukanlah air mana yang paling jernih. Persoalannya adalah, mengapa aliran air itu selalu merasa berhak menenggelamkan yang lain?"</p>
+                `
+            },
+            {
+                type: 'interactive',
+                chapter: 2,
+                title: 'Renungan',
+                content: `
+                    <div class="text-center py-12 flex flex-col items-center justify-center h-full content-text">
+                        <p class="title-font text-2xl md:text-3xl mb-12 max-w-lg leading-relaxed">Gurumu bertanya:<br><br>"Jika dua orang sama-sama merasa dirinya benar, apakah salah satunya pasti berbohong?"</p>
+                        <div class="flex flex-col gap-6 w-full max-w-xs mx-auto">
+                            <button onclick="handleInteractive('Ya')" class="minimal-btn border border-current py-4 px-6 rounded-sm text-lg hover:bg-[var(--gold)] hover:text-white hover:border-transparent transition-all">Ya</button>
+                            <button onclick="handleInteractive('Tidak')" class="minimal-btn border border-current py-4 px-6 rounded-sm text-lg hover:bg-[var(--gold)] hover:text-white hover:border-transparent transition-all">Tidak</button>
+                            <button onclick="handleInteractive('Belum tahu')" class="minimal-btn border border-current py-4 px-6 rounded-sm text-lg hover:bg-[var(--gold)] hover:text-white hover:border-transparent transition-all">Aku belum tahu</button>
+                        </div>
+                        <div id="interactive-response" class="mt-12 opacity-0 transition-opacity duration-1000 italic text-lg title-font h-24 max-w-md"></div>
+                    </div>
+                `
+            },
+            {
+                type: 'chapter',
+                chapter: 3,
+                title: 'Seratus Orang, Seratus Kebenaran',
+                imagePrompt: 'Sebuah batang pohon tua yang besar tumbang melintang. Tiga siluet samar: penebang kayu (senang), saudagar (marah), anak kecil (bermain). Suasana kabut.',
+                content: `
+                    <p class="story-paragraph">"Tetapi Guru," sela Jian, tidak puas. "Kebenaran itu pasti satu! Tidak mungkin kebohongan menjadi benar hanya karena diyakini oleh banyak orang."</p>
+                    <p class="story-paragraph">Guru Tariq terus berjalan perlahan di tepi sungai. "Dulu, saat usiaku masih sedapamu, aku melihat sebuah pohon besar tumbang di tengah jalan desa," cerita Guru.</p>
+                    <p class="story-paragraph">"Seorang penebang kayu melihat pohon itu dan bersorak girang; baginya itu adalah rezeki kayu bakar. Seorang saudagar sutra melihatnya dan mengutuk marah; baginya itu adalah penghalang jalan yang membuat dagangannya terlambat. Seorang anak kecil melihatnya dan tertawa; baginya itu adalah arena bermain yang baru."</p>
+                    <p class="story-paragraph">Guru berhenti melangkah. "Apakah pohon itu berkewajiban menyenangkan mereka semua? Tidak. Pohon itu sekadar tumbang. Manusia-manusia itulah yang memberinya makna, memberinya label 'baik' atau 'buruk', berdasarkan apa yang menguntungkan mereka."</p>
+                    <p class="story-paragraph">Jian terdiam. Kemarahannya sedikit mereda, digantikan oleh keraguan.</p>
+                    <p class="story-paragraph">"Seratus orang melihat satu hal yang sama, akan lahir seratus kebenaran yang berbeda," lanjut Guru Tariq. Langkah Guru kembali berlanjut. "Pertanyaannya adalah... apa yang terjadi ketika sang saudagar kaya membayar orang untuk menyingkirkan anak kecil itu, dengan alasan bahwa jalan utama harus bersih demi 'kepentingan umum'?"</p>
+                `
+            },
+            {
+                type: 'chapter',
+                chapter: 4,
+                title: 'Jalan yang Mengaku Benar',
+                imagePrompt: 'Hutan bambu tinggi menjulang. Guru dan Jian melihat ke bawah bukit. Di kejauhan, figur-figur kecil berdebat di gerbang desa. Estetika lapang.',
+                content: `
+                    <p class="story-paragraph">Mereka berdua berjalan semakin jauh, menembus rimbunnya hutan bambu. Angin bertiup, membuat batang-batang bambu bergesekan, menghasilkan suara seperti ratapan panjang.</p>
+                    <p class="story-paragraph">Di ujung jalan setapak, mereka melihat sebuah pemandangan dari kejauhan. Sekelompok pedagang sedang berdebat sengit dengan para penjaga desa. Keduanya membawa nama kebaikan. Keduanya membawa nama kebenaran.</p>
+                    <p class="story-paragraph">Namun, dari kejauhan, Guru Tariq bisa melihat apa yang tidak diucapkan. Sang pedagang ingin memonopoli harga sebelum musim dingin tiba. Sang penjaga desa ingin uang pelicin sebelum membuka gerbang.</p>
+                    <p class="story-paragraph">"Lihatlah bambu-bambu di sekitarmu, Jian," bisik Guru Tariq. "Bambu yang lentur akan selamat dari badai. Ia membungkuk, lalu kembali tegak. Ia tidak kehilangan dirinya."</p>
+                    <p class="story-paragraph">Jian menatap sinis. "Mereka tidak lentur, Guru. Mereka kaku seperti batu."</p>
+                    <p class="story-paragraph">"Bukan, Jian," potong Guru pelan. "Mereka justru sangat lentur. Mereka melenturkan kebenaran, melengkungkannya sedemikian rupa agar pas dengan ambisi dan kelangsungan hidup mereka. Kelompok, aturan, bahkan keyakinan agama... semuanya sering dijadikan jubah untuk menutupi niat yang telanjang."</p>
+                `
+            },
+            {
+                type: 'chapter',
+                chapter: 5,
+                title: 'Pedang yang Tidak Terlihat',
+                imagePrompt: 'Hujan gerimis lembut (garis diagonal halus). Jian menunduk sedih. Guru Tariq menepuk bahunya dengan hangat. Fokus emosional.',
+                content: `
+                    <p class="story-paragraph">Jian menunduk. Langkah kakinya gontai. Tiba-tiba, pertahanan pemuda itu runtuh.</p>
+                    <p class="story-paragraph">"Mereka menghancurkanku, Guru," bisik Jian, suaranya serak menahan tangis. "Orang-orang yang mengaku paling suci di kotaku. Mereka menyebar fitnah, merendahkanku di depan umum. Mereka mengatakan aku sesat, hanya karena aku menolak tunduk pada keserakahan mereka."</p>
+                    <p class="story-paragraph">Langit pegunungan perlahan mendung. Gerimis kecil mulai turun. Guru Tariq meletakkan tangannya yang keriput di atas bahu Jian. Sentuhan itu hangat dan menenangkan.</p>
+                    <p class="story-paragraph">"Jian... tahukah engkau senjata apa yang paling banyak menumpahkan darah dalam sejarah manusia?"</p>
+                    <p class="story-paragraph">"Pedang besi," jawab Jian lirih.</p>
+                    <p class="story-paragraph">"Bukan," Guru menggeleng. "Pedang besi hanya memotong daging. Ada pedang yang jauh lebih tajam. Pedang itu tidak berwujud. Ia terbuat dari kata-kata, ditempa oleh rasa paling benar, dan diasah oleh kesombongan."</p>
+                    <p class="story-paragraph">Guru menatap rintik hujan. "Merendahkan orang lain sering kali adalah cara paling murah dan pengecut bagi seseorang untuk meninggikan dirinya sendiri. Mereka tidak sedang membelah tubuhmu, Jian. Mereka sedang mencoba membunuh jiwamu. Luka oleh tebasan besi bisa dijahit. Tetapi, bagaimana engkau mengobati luka yang ditorehkan atas nama kebaikan?"</p>
+                `
+            },
+            {
+                type: 'chapter',
+                chapter: 6,
+                title: 'Melukis Hati',
+                imagePrompt: 'Di dalam pondok. Guru memegang kuas, menunjuk kertas yang benar-benar kosong. Di sebelahnya ada lukisan gunung yang indah. Jian tertegun.',
+                content: `
+                    <p class="story-paragraph">Mereka kembali ke pondok sebelum hujan semakin deras. Di dalam, suasana terasa hangat. Aroma teh bercampur dengan wangi tinta pinus menyelimuti ruangan.</p>
+                    <p class="story-paragraph">Guru Tariq berjalan mendekati meja kayunya, membuka sebuah gulungan lukisan pegunungan yang megah. "Aku bisa melukis gunung dengan mata tertutup," kata Guru Tariq. Ia lalu mengambil kuasnya dan menunjuk ke selembar kertas kosong. "Sungai juga mudah. Hujan, batu... semuanya mudah. Karena mereka membiarkan dirinya dilihat oleh dunia."</p>
+                    <p class="story-paragraph">Guru menyodorkan kuas itu kepada Jian. "Sekarang, cobalah engkau lukiskan keserakahan di atas kertas ini."</p>
+                    <p class="story-paragraph">Jian tertegun. Ia tidak mengambil kuas itu.</p>
+                    <p class="story-paragraph">"Bisakah kau melukis iri hati?" desak Guru dengan suara lembut namun tajam. "Bisakah kau melukis wajah seseorang yang tersenyum memelukmu, tetapi di dalam hatinya ia diam-diam berharap engkau jatuh dan hancur?"</p>
+                    <p class="story-paragraph">Jian menelan ludah. "Tidak ada tinta yang bisa menggambar itu, Guru."</p>
+                    <p class="story-paragraph">"Benar. Melukis alam adalah menggambar apa yang terlihat. Tetapi melukis manusia... adalah mencoba meraba apa yang bersembunyi dalam kegelapan. Alam mudah dipahami karena ia tidak punya ego. Memahami hati manusia sangat sulit, karena ia dilukis dengan tipu muslihat."</p>
+                    <div class="text-center mt-12 md:mt-20">
+                        <button onclick="triggerSilence()" class="minimal-btn border-b border-current pb-1 uppercase tracking-widest text-xs hover:text-[var(--gold)] hover:border-[var(--gold)]">Hening Sejenak</button>
+                    </div>
+                `
+            },
+            {
+                type: 'chapter',
+                chapter: 7,
+                title: 'Arus Zaman',
+                imagePrompt: 'Metafora arus sungai yang deras menyapu melintasi frame. Di atasnya, jembatan batu kecil tempat bayangan siluet Guru dan Jian berdiri mengamati.',
+                content: `
+                    <p class="story-paragraph">Waktu merangkak menuju senja. Cahaya keemasan menembus celah jendela bambu, menciptakan garis-garis bayangan di lantai pondok.</p>
+                    <p class="story-paragraph">"Dunia ini tidak diam, Jian. Ia mengalir seperti sungai, membawa zaman yang silih berganti," ucap Guru sambil duduk bersila dan memutar tasbih kayunya perlahan.</p>
+                    <p class="story-paragraph">"Ada zaman ketika kekuasaan menjadi satu-satunya tuhan yang disembah. Ada zaman ketika nama baik dan kehormatan adalah segalanya. Lalu datang zaman ketika koin emas dan perak menundukkan raja-raja. Dan nanti, akan ada zaman di mana kelompok dan golongannya sendiri yang dianggap sebagai kebenaran mutlak."</p>
+                    <p class="story-paragraph">"Maksud Guru, sifat manusia tidak pernah berubah?" tanya Jian.</p>
+                    <p class="story-paragraph">"Ya. Dari zaman nabi-nabi hingga zaman ini, manusia tetaplah makhluk yang selalu mencari pembenaran atas keinginannya. Mereka akan terus menggunakan kata 'demi keadilan', 'demi kelangsungan hidup', atau 'demi ajaran suci' untuk mendapatkan apa yang sebenarnya diinginkan oleh hawa nafsu mereka."</p>
+                    <p class="story-paragraph">Jian menatap lantai kayu, merasa ada ruang hampa di dadanya. "Jika pada akhirnya semua hanya tentang kepalsuan dan pembenaran diri... lalu untuk apa kita bersusah payah mempertahankan kebenaran, Guru?"</p>
+                `
+            },
+            {
+                type: 'chapter',
+                chapter: 8,
+                title: 'Harga Sebuah Kebenaran',
+                imagePrompt: 'Close up emosional. Guru menunduk, melihat tangannya sendiri yang keriput dengan ekspresi menyesal. Cahaya temaram senja.',
+                content: `
+                    <p class="story-paragraph">Pertanyaan Jian menggantung di udara, berat dan menyayat. Tangan Guru Tariq yang memegang tasbih tiba-tiba berhenti.</p>
+                    <p class="story-paragraph">"Karena aku pernah kehilangan kebenaran itu, Jian," ucap Guru dengan suara bergetar yang nyaris tak terdengar. Jian mengangkat wajahnya, terkejut.</p>
+                    <p class="story-paragraph">"Puluhan tahun lalu, aku adalah pemuda ambisius. Ada seorang ahli kaligrafi lain di kotaku. Hatinya lebih bersih. Namun, demi posisi sebagai Guru Besar istana, aku diam saat orang-orang menyebarkan fitnah tentangnya. Aku menggunakan jubah agamaku, kata-kataku yang pandai, untuk meyakinkan mereka bahwa aku yang lebih layak."</p>
+                    <p class="story-paragraph">Satu tetes air mata jatuh, membasahi jubah gelap Guru Tariq. "Aku mendapat jabatan itu. Aku merasa diriku menang, dan aku mencari seribu alasan untuk membenarkan tindakanku. Aku merasa diriku benar."</p>
+                    <p class="story-paragraph">Guru menatap telapak tangannya sendiri seolah melihat noda darah. "Tetapi sejak hari itu, jiwaku mati. Kuasku kehilangan ruh. Aku lari ke lembah sunyi ini karena aku tidak sanggup menatap wajahku sendiri di cermin air."</p>
+                    <p class="story-paragraph font-bold text-[var(--gold)] mt-6">"Kebenaran tidak menghasilkan keuntungan, Jian. Kebenaran juga tidak selalu membutuhkan suara yang paling keras. Kebenaran sejati... sering kali hanya membutuhkan hati yang sedia untuk hancur dan mengakui kesalahannya sendiri."</p>
+                `
+            },
+            {
+                type: 'chapter',
+                chapter: 9,
+                title: 'Yang Tersisa Setelah Semua Pergi',
+                imagePrompt: 'Malam hari. Lentera kertas menyala hangat. Guru menulis satu aksara besar (Hati/Qalb) di kertas. Jian melihat dengan damai.',
+                content: `
+                    <p class="story-paragraph">Malam akhirnya turun menyelimuti Lembah Jiuzhai. Jian beranjak, menyalakan lentera kertas di sudut ruangan. Cahaya kuning yang hangat mengusir bayang-bayang kelam.</p>
+                    <p class="story-paragraph">Guru Tariq telah kembali tenang. Ia mencelupkan kuasnya, lalu dengan satu tarikan napas panjang, menggoreskan tinta itu. Sapuan kuasnya tegas, mengalir, dan penuh kehidupan.</p>
+                    <p class="story-paragraph">"Apa yang Guru tulis?" tanya Jian pelan.</p>
+                    <p class="story-paragraph">"Hati," jawab Guru Tariq. "Atau Qalb, tempat di mana Yang Maha Kuasa menitipkan rahasia-Nya."</p>
+                    <p class="story-paragraph">Guru menatap nyala api kecil di dalam lentera. "Pada akhirnya, Jian... kekayaan akan menguap. Nama besar akan dilupakan. Kekuasaan akan runtuh. Zaman akan memakan dirinya sendiri. Tetapi jejak kebaikan yang engkau tinggalkan di dalam hati manusia, keikhlasan yang engkau jaga saat tidak ada satu pun orang yang melihat, dan keadilan yang engkau pegang meski ia melukaimu... itulah satu-satunya tulisan yang akan tetap terbaca, bahkan setelah tinta di dunia ini mengering."</p>
+                    <p class="story-paragraph">Jian merasakan matanya memanas. Dendam di dadanya perlahan mencair.</p>
+                    <p class="story-paragraph">"Besok kabut akan turun lagi," bisik Guru Tariq. "Dan saat itu, engkau harus kembali berjalan."</p>
+                `
+            },
+            {
+                type: 'chapter',
+                chapter: 10,
+                title: 'Ketika Kabut Menghilang',
+                imagePrompt: 'Pagi cerah. Kabut terangkat memperlihatkan gunung megah. Jian berjalan menjauh membawa buntelan kecil. Guru berdiri kecil di pintu pondok.',
+                content: `
+                    <p class="story-paragraph">Pagi datang membawa embun dan cahaya keperakan. Kabut putih perlahan terangkat dari Lembah Jiuzhai, menyingkap barisan pegunungan yang berdiri kokoh tak tergoyahkan. Sungai tetap mengalir, suaranya abadi. Sepasang burung bangau terbang melintasi langit.</p>
+                    <p class="story-paragraph">Jian berdiri di depan pondok, mengenakan kembali jubah perjalanannya. Ia menoleh ke belakang, menatap Guru Tariq yang berdiri tersenyum di ambang pintu.</p>
+                    <p class="story-paragraph">Jian akhirnya menyadari satu hal yang luar biasa. Sepanjang malam itu, Guru Tariq tidak pernah mengajarinya untuk mengetahui siapa yang benar dan siapa yang salah di dunia ini. Guru itu hanya mengajarinya bagaimana cara memeriksa ruang-ruang gelap di dalam hatinya sendiri.</p>
+                    <p class="story-paragraph">"Aku pamit, Guru," ucap Jian, menundukkan kepalanya dalam-dalam. Guru Tariq membalas bungkukan itu, merendah seolah ia yang menjadi murid.</p>
+                    <p class="story-paragraph title-font text-2xl text-center my-12 italic opacity-80">"Jangan sibuk mencari siapa yang tersesat di ujung jalan, sebelum engkau berani memeriksa kebohongan yang diam-diam kau pelihara di dalam dadamu."</p>
+                    <p class="story-paragraph">Jian tersenyum, berbalik, dan melangkah menembus kabut. Gunung tetap diam. Tetapi kini, hati pemuda itu tidak lagi riuh.</p>
+                `
+            },
+            {
+                type: 'ending',
+                chapter: 0,
+                content: `
+                    <div class="text-center flex flex-col items-center justify-center h-full px-4 content-text">
+                        <p class="title-font text-2xl md:text-3xl leading-loose mb-12 opacity-80">
+                            Gunung tetap diam.<br>
+                            Sungai tetap mengalir.<br>
+                            Zaman terus berjalan.<br><br>
+                            Yang berubah setiap hari<br>
+                            bukan hanya dunia.<br>
+                            Tetapi hati manusia.
+                        </p>
+                        <p class="title-font text-xl md:text-2xl leading-loose opacity-60 mb-16">
+                            Dan mungkin,<br>
+                            perjalanan paling jauh<br>
+                            bukanlah perjalanan menuju gunung.<br><br>
+                            Melainkan perjalanan<br>
+                            kembali menuju hati sendiri.
+                        </p>
+                    </div>
+                `
+            }
+        ];
+
+        let state = {
+            currentPage: 0,
+            theme: 'light',
+            fontSize: 1, // 0: base, 1: lg, 2: xl
+            isMenuOpen: false
+        };
+
+        const fontSizes = ['text-base', 'text-lg', 'text-xl'];
+        const bodyEl = document.body;
+        const pagesWrapper = document.getElementById('pages-wrapper');
+        const tocList = document.getElementById('toc-list');
+        const progressBar = document.getElementById('progress-bar');
+        const pageIndicator = document.getElementById('page-indicator');
+        
+        let idleTimer;
+
+        function initApp() {
+            // Load saved state
+            if(localStorage.getItem('melukis_hati_theme')) state.theme = localStorage.getItem('melukis_hati_theme');
+            if(localStorage.getItem('melukis_hati_fontSize')) state.fontSize = parseInt(localStorage.getItem('melukis_hati_fontSize'));
+            
+            let savedPage = 0;
+            if(localStorage.getItem('melukis_hati_page')) {
+                savedPage = parseInt(localStorage.getItem('melukis_hati_page'));
+            }
+
+            // Handle URL params for History API
+            const urlParams = new URLSearchParams(window.location.search);
+            const pageParam = urlParams.get('page');
+            if (pageParam !== null && !isNaN(pageParam)) {
+                savedPage = parseInt(pageParam);
+            }
+
+            applyTheme();
+            generateTOC();
+            setupAutoIdle();
+            setupTouchGestures();
+            
+            // History API Popstate listener
+            window.addEventListener('popstate', (e) => {
+                if (e.state && e.state.page !== undefined) {
+                    renderPage(e.state.page, e.state.page > state.currentPage ? 'next' : 'prev', false);
+                } else {
+                    renderPage(0, 'prev', false);
+                }
+            });
+
+            // Replace initial state
+            try {
+                history.replaceState({ page: savedPage }, "", "?page=" + savedPage);
+            } catch (e) {
+                console.warn("History API is restricted in this environment. Falling back to local storage.");
+            }
+            renderPage(savedPage, 'next', false);
+
+            // Keyboard Nav
+            document.addEventListener('keydown', (e) => {
+                resetIdleTimer();
+                if (e.key === 'ArrowRight' || e.key === ' ') nextPage();
+                else if (e.key === 'ArrowLeft') prevPage();
+                else if (e.key === 'Escape') { if(state.isMenuOpen) toggleMenu(); }
+            });
+        }
+
+        function renderPage(index, direction = 'next', pushHistory = true) {
+            if (index < 0 || index >= STORY_DATA.length) return;
+            
+            if (pushHistory && index !== state.currentPage) {
+                try {
+                    history.pushState({ page: index }, "", "?page=" + index);
+                } catch (e) {
+                    // Suppress error in restricted iframe/blob environments
+                }
+            }
+
+            state.currentPage = index;
+            localStorage.setItem('melukis_hati_page', index);
+            
+            const data = STORY_DATA[index];
+            const oldPage = pagesWrapper.querySelector('.page-layer:not(.turning-out)');
+            
+            // Create new page element
+            const newPage = document.createElement('div');
+            newPage.className = `page-layer ${fontSizes[state.fontSize]}`;
+            
+            // Build Content
+            if (data.type === 'chapter') {
+                newPage.innerHTML = `
+                    <div class="max-w-5xl mx-auto w-full h-full flex flex-col">
+                        <div class="content-title text-center mb-12 md:mb-16">
+                            <span class="text-xs text-[var(--gold)] opacity-70 block mb-4 tracking-[0.3em] uppercase">Bab ${data.chapter}</span>
+                            <h2 class="title-font text-3xl md:text-5xl font-bold">${data.title}</h2>
+                        </div>
+                        
+                        <div class="content-image ink-illustration w-full max-w-2xl mx-auto h-40 md:h-56 mb-12 flex items-center justify-center p-6 text-center text-sm italic opacity-60">
+                            ${data.imagePrompt}
+                        </div>
+                        
+                        <div class="content-text text-columns w-full">
+                            ${data.content}
+                        </div>
+                        <!-- Spacer for bottom reading comfort -->
+                        <div class="h-24 w-full md:hidden"></div>
+                    </div>
+                `;
+            } else {
+                newPage.innerHTML = data.content;
+            }
+
+            // Animate Transitions
+            if (oldPage) {
+                oldPage.classList.add('turning-out');
+                oldPage.style.animation = direction === 'next' ? 'turnOutNext 0.8s cubic-bezier(0.645, 0.045, 0.355, 1) forwards' : 'turnOutPrev 0.8s cubic-bezier(0.645, 0.045, 0.355, 1) forwards';
+                newPage.style.animation = direction === 'next' ? 'turnInNext 0.8s cubic-bezier(0.645, 0.045, 0.355, 1) forwards' : 'turnInPrev 0.8s cubic-bezier(0.645, 0.045, 0.355, 1) forwards';
+                
+                setTimeout(() => {
+                    if (oldPage.parentNode) oldPage.parentNode.removeChild(oldPage);
+                }, 800);
+            } else {
+                // First load
+                newPage.style.animation = 'softFadeIn 1s forwards';
+            }
+
+            pagesWrapper.appendChild(newPage);
+            updateNavVisibility();
+            
+            // Scroll new page to top
+            newPage.scrollTop = 0;
+        }
+
+        function nextPage() {
+            if (state.currentPage < STORY_DATA.length - 1) renderPage(state.currentPage + 1, 'next');
+        }
+
+        function prevPage() {
+            if (state.currentPage > 0) renderPage(state.currentPage - 1, 'prev');
+        }
+
+        function goToPage(index) {
+            const dir = index > state.currentPage ? 'next' : 'prev';
+            renderPage(index, dir);
+            if (state.isMenuOpen) toggleMenu();
+        }
+
+        function updateNavVisibility() {
+            const btnPrev = document.getElementById('nav-prev');
+            const btnNext = document.getElementById('nav-next');
+            
+            btnPrev.style.display = state.currentPage === 0 ? 'none' : 'flex';
+            btnNext.style.display = state.currentPage === STORY_DATA.length - 1 ? 'none' : 'flex';
+
+            // Progress Bar
+            const total = STORY_DATA.length - 1;
+            const progress = (state.currentPage / total) * 100;
+            progressBar.style.width = `${progress}%`;
+            
+            if (state.currentPage > 0 && state.currentPage < STORY_DATA.length - 1) {
+                pageIndicator.innerText = `${state.currentPage}`;
+            } else {
+                pageIndicator.innerText = '';
+            }
+        }
+
+        function setupAutoIdle() {
+            window.addEventListener('mousemove', resetIdleTimer);
+            window.addEventListener('touchstart', resetIdleTimer, {passive: true});
+            window.addEventListener('scroll', resetIdleTimer, true);
+        }
+
+        function resetIdleTimer() {
+            const uiElements = document.querySelectorAll('.ui-element');
+            
+            // Show elements
+            uiElements.forEach(el => {
+                el.classList.remove('opacity-0', 'pointer-events-none');
+            });
+            bodyEl.classList.remove('cursor-hidden');
+            
+            clearTimeout(idleTimer);
+            
+            // Hide elements after 3s idle, if menu is not open
+            idleTimer = setTimeout(() => {
+                if(!state.isMenuOpen) {
+                    uiElements.forEach(el => {
+                        el.classList.add('opacity-0', 'pointer-events-none');
+                    });
+                    bodyEl.classList.add('cursor-hidden');
+                }
+            }, 3000);
+        }
+
+        function toggleTheme() {
+            state.theme = state.theme === 'light' ? 'dark' : 'light';
+            localStorage.setItem('melukis_hati_theme', state.theme);
+            applyTheme();
+        }
+
+        function applyTheme() {
+            if (state.theme === 'dark') bodyEl.classList.add('ink-night');
+            else bodyEl.classList.remove('ink-night');
+        }
+
+        function changeFontSize() {
+            state.fontSize = (state.fontSize + 1) % 3;
+            localStorage.setItem('melukis_hati_fontSize', state.fontSize);
+            // Re-render current page instantly without history push to apply font
+            renderPage(state.currentPage, 'next', false); 
+        }
+
+        function toggleMenu() {
+            state.isMenuOpen = !state.isMenuOpen;
+            const menu = document.getElementById('side-menu');
+            const overlay = document.getElementById('menu-overlay');
+            
+            if (state.isMenuOpen) {
+                menu.classList.remove('-translate-x-full');
+                overlay.classList.remove('opacity-0', 'pointer-events-none');
+                resetIdleTimer(); // Ensure UI is visible when menu opens
+            } else {
+                menu.classList.add('-translate-x-full');
+                overlay.classList.add('opacity-0', 'pointer-events-none');
+            }
+        }
+
+        function generateTOC() {
+            tocList.innerHTML = '';
+            
+            const coverBtn = document.createElement('button');
+            coverBtn.className = 'text-left py-2 hover:text-[var(--gold)] transition-colors opacity-80';
+            coverBtn.innerHTML = `Sampul`;
+            coverBtn.onclick = () => goToPage(0);
+            tocList.appendChild(coverBtn);
+
+            STORY_DATA.forEach((data, index) => {
+                if (data.type === 'chapter') {
+                    const btn = document.createElement('button');
+                    btn.className = 'text-left py-2 hover:text-[var(--gold)] transition-colors opacity-80';
+                    btn.innerHTML = `<span class="opacity-50 mr-3 text-xs">0${data.chapter}</span> ${data.title}`;
+                    btn.onclick = () => goToPage(index);
+                    tocList.appendChild(btn);
+                }
+            });
+        }
+
+        function triggerSilence() {
+            const overlay = document.getElementById('silence-overlay');
+            overlay.classList.remove('opacity-0', 'pointer-events-none');
+            bodyEl.classList.remove('cursor-hidden');
+        }
+
+        function closeSilence() {
+            const overlay = document.getElementById('silence-overlay');
+            overlay.classList.add('opacity-0', 'pointer-events-none');
+            resetIdleTimer();
+        }
+
+        function handleInteractive(choice) {
+            const res = document.getElementById('interactive-response');
+            res.classList.remove('opacity-0');
+            res.innerHTML = `Menarik engkau memilih <strong>"${choice}"</strong>.<br><br>Mungkin pertanyaan ini memang tidak meminta jawaban cepat. Sebab terkadang, yang perlu diperiksa bukan hanya siapa yang benar, tetapi dari mana keyakinan kita berasal.`;
+        }
+
+        function setupTouchGestures() {
+            let touchStartX = 0;
+            let touchEndX = 0;
+            
+            document.addEventListener('touchstart', e => {
+                touchStartX = e.changedTouches[0].screenX;
+            }, {passive: true});
+            
+            document.addEventListener('touchend', e => {
+                touchEndX = e.changedTouches[0].screenX;
+                handleSwipe();
+            }, {passive: true});
+            
+            function handleSwipe() {
+                // Minimum swipe distance to trigger page turn
+                const minDistance = 75; 
+                if (touchEndX < touchStartX - minDistance) nextPage();
+                if (touchEndX > touchStartX + minDistance) prevPage();
+            }
+        }
+
+        window.onload = initApp;
+
+    </script>
+</body>
+</html>
